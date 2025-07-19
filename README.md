@@ -1,6 +1,6 @@
 # Location Microservice
 
-This is the Location microservice for the ShipAnything platform, handling geolocation, tracking, and location-based services.
+This is the Location microservice for the ShipAnything platform, handling geolocation, tracking, and location-based services. **This service is protected by the Auth Gateway and requires a valid Bearer token for API access.**
 
 ## Features
 
@@ -8,13 +8,78 @@ This is the Location microservice for the ShipAnything platform, handling geoloc
 -   Route optimization
 -   Location-based search
 -   Distance calculations
+-   User-specific location management
 
-## Endpoints
+## Authentication
 
--   `GET /health` - Health check
+**All API endpoints (except health check) are protected by the NGINX API Gateway and require a valid Bearer token.**
+
+The authentication flow works as follows:
+
+1. Client sends request to `http://location.shipanything.test/api/*` with Bearer token
+2. NGINX API Gateway intercepts and validates the token with the auth service
+3. If valid, NGINX forwards the request with user context headers to this service
+4. This service processes the request with authenticated user context
+
+**Example API call:**
+
+```bash
+curl -X GET http://location.shipanything.test/api/locations \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**To get an access token, register/login via the Auth service:**
+
+```bash
+# Login to get token
+curl -X POST http://auth.shipanything.test/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "your@email.com", "password": "yourpassword"}'
+```
+
+## API Endpoints
+
+### Public Endpoints (No Authentication Required)
+
+-   `GET /health` - Service health check
+
+### Protected Endpoints (Require Bearer Token)
+
+-   `GET /api/locations` - Get user's locations
+-   `POST /api/locations` - Create new location
+-   `GET /api/locations/{id}` - Get specific location
+-   `PUT /api/locations/{id}` - Update location
+-   `DELETE /api/locations/{id}` - Delete location
+
+### Internal Test Endpoints (Container Network Only)
+
 -   `GET /api/test/dbs` - Database connectivity test
 -   `GET /api/test/rabbitmq` - RabbitMQ connectivity test
 -   `GET /api/test/kafka` - Kafka connectivity test
+-   `GET /api/test/auth-status` - Authentication status check
+
+## User Context
+
+**This service automatically receives user context from the NGINX API Gateway:**
+
+-   User ID is available in controllers via `$request->attributes->get('user_id')`
+-   User email via `$request->attributes->get('user_email')`
+-   All location data is automatically filtered by authenticated user
+
+**Example usage in controller:**
+
+```php
+public function getLocations(Request $request)
+{
+    $userId = $request->attributes->get('user_id');
+    $userEmail = $request->attributes->get('user_email');
+
+    // Get locations for the authenticated user only
+    $locations = Location::where('user_id', $userId)->get();
+
+    return response()->json($locations);
+}
+```
 
 ## Environment Variables
 
